@@ -1,0 +1,33 @@
+{
+  "name": "@titorelli-org/titus-transmitter",
+  "version": "0.1.0",
+  "description": "",
+  "main": "main.ts",
+  "scripts": {
+    "dev": "nodemon",
+    "start": "ts-node -r dotenv/config server.ts"
+  },
+  "author": "YChebotaev <yury@chebotaev.ru>",
+  "license": "AGPL-3.0-only",
+  "dependencies": {
+    "@fastify/swagger": "^9.5.2",
+    "@fastify/swagger-ui": "^5.2.3",
+    "@openobserve/pino-openobserve": "^1.0.0",
+    "@titorelli-org/fastify-oidc-provider": "^1.1.1",
+    "@titorelli-org/fastify-protected-routes": "^0.7.0",
+    "@titorelli-org/jwks-store": "^0.2.0",
+    "dotenv": "^17.2.3",
+    "envalid": "^8.1.0",
+    "fastify": "^5.6.1",
+    "mongodb": "^6.20.0",
+    "nodemon": "^3.1.10",
+    "pino": "^10.0.0",
+    "pino-pretty": "^13.1.2",
+    "sqlite3": "^5.1.7",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3"
+  },
+  "devDependencies": {
+    "npm-check-updates": "^19.0.0"
+  }
+}

@@ -1,0 +1,43 @@
+name: Console build and push
+on:
+  push:
+    branches:
+      - main
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: "titus-transmitter"
+jobs:
+  build-and-push:
+    name: Transmitter build and push
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+      contents: read
+      attestations: write
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Login to container ghcr
+        uses: docker/login-action@65b78e6e13532edd9afa3aa52ac7964289d1a9c1
+        with:
+          registry: ${{env.REGISTRY}}
+          username: ${{github.actor}}
+          password: ${{secrets.GITHUB_TOKEN}}
+      - name: Configure .npmrc
+        run: |
+          echo "@titorelli-org:registry=https://npm.pkg.github.com"  > .npmrc
+          echo '//npm.pkg.github.com/:_authToken=${{secrets.GITHUB_TOKEN}}' >> .npmrc
+      - name: Build and push
+        id: push
+        uses: docker/build-push-action@f2a1d5e99d037542a71f64918e516c093c6f3fc4
+        with:
+          context: .
+          push: true
+          tags: ghcr.io/titorelli-org/${{env.IMAGE_NAME}}
+      - name: Artifact attestation
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-name: ${{env.REGISTRY}}/titorelli-org/${{env.IMAGE_NAME}}
+          subject-digest: ${{steps.push.outputs.digest}}
+          push-to-registry: true
