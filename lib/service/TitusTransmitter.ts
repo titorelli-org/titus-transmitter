@@ -48,7 +48,7 @@ export class TitusTransmitter {
     this.botStateRepository = botStateRepository;
     this.hookStateRepository = hookStateRepository;
     this.updateRepository = updateRepository;
-    this.telegram = new Telegram(telegramConfig?.baseUrl);
+    this.telegram = new Telegram(telegramConfig?.baseUrl, logger);
     this.logger = logger;
     // @ts-expect-error 2322
     this.fastify = fastify({
