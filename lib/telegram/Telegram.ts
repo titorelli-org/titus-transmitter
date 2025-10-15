@@ -1,3 +1,5 @@
+import type { Logger } from "pino";
+
 export type WebhookInfo = {
   url: string;
   has_custom_certificate: boolean;
@@ -8,8 +10,17 @@ export type WebhookInfo = {
   allowed_updates: string[];
 };
 
+export type SetWebhookBody = {
+  ok: boolean;
+  result: boolean;
+  description: string;
+};
+
 export class Telegram {
-  constructor(private readonly baseUrl = "https://api.telegram.org") {}
+  constructor(
+    private readonly baseUrl = "https://api.telegram.org",
+    private readonly logger: Logger,
+  ) {}
 
   public async setWebhook(
     botToken: string,
@@ -22,20 +33,26 @@ export class Telegram {
       allowedUpdates?: string[];
       secretToken?: string;
     },
-  ) {
-    const resp = await fetch(`${this.baseUrl}/bot${botToken}/setWebhook`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        url,
-        allowed_updates: allowedUpdates,
-        secret_token: secretToken,
-      }),
-    });
+  ): Promise<SetWebhookBody | null> {
+    try {
+      const resp = await fetch(`${this.baseUrl}/bot${botToken}/setWebhook`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          url,
+          allowed_updates: allowedUpdates,
+          secret_token: secretToken,
+        }),
+      });
 
-    return resp.json();
+      return resp.json();
+    } catch (error) {
+      this.logger.error(error);
+
+      return null;
+    }
   }
 
   public async getWebhookInfo(botToken: string) {

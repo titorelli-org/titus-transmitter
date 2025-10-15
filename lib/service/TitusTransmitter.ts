@@ -153,18 +153,14 @@ export class TitusTransmitter {
   }
 
   private async ensureWebhook(botId: string, botToken: string) {
-    const { status, webhookInfo } = await this.telegram.getWebhookInfo(
-      botToken,
-    );
-
-    if (status === 404) {
-      await this.createWebhook(botId, botToken);
-    }
+    await this.createWebhook(botId, botToken);
   }
 
   private async createWebhook(botId: string, botToken: string) {
-    await this.telegram.setWebhook(botToken, {
-      url: `${this.transmitterOrigin}/updates/${botId}`,
+    const url = `${this.transmitterOrigin}/updates/${botId}`;
+
+    const result = await this.telegram.setWebhook(botToken, {
+      url,
       secretToken: await this.getSecretTokenForBot(botId),
       allowedUpdates: [
         "message",
@@ -187,6 +183,12 @@ export class TitusTransmitter {
         "removed_chat_boost",
       ],
     });
+
+    if (!result) {
+      this.logger.warn({ botId, botToken, url }, "Failed to create webhook");
+    }
+
+    return result;
   }
 
   private async getSecretTokenForBot(botId: string) {
