@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Titus Transmitter Test Client</title>
+    <script src="https://cdn.socket.io/4.8.1/socket.io.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .container {
+            border: 1px solid #ddd;
+            padding: 20px;
+            margin: 10px 0;
+            border-radius: 5px;
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+        }
+        .connected { background-color: #d4edda; color: #155724; }
+        .disconnected { background-color: #f8d7da; color: #721c24; }
+        .message {
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            padding: 10px;
+            margin: 5px 0;
+            border-radius: 3px;
+            font-family: monospace;
+            white-space: pre-wrap;
+        }
+        input, button {
+            padding: 8px;
+            margin: 5px;
+            border: 1px solid #ddd;
+            border-radius: 3px;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+    </style>
+</head>
+<body>
+    <h1>Titus Transmitter Test Client</h1>
+    
+    <div class="container">
+        <h3>Connection (Many-to-Many Support)</h3>
+        <div id="status" class="status disconnected">Disconnected</div>
+        <input type="text" id="serverUrl" placeholder="Server URL" value="http://localhost:3000">
+        <input type="text" id="botId" placeholder="Bot ID" value="test-bot">
+        <input type="datetime-local" id="sinceDate" placeholder="Since Date">
+        <button onclick="connect()">Connect</button>
+        <button onclick="disconnect()">Disconnect</button>
+        <button onclick="getStats()">Get Stats</button>
+        <button onclick="getBotStats()">Get Bot Stats</button>
+    </div>
+
+    <div class="container">
+        <h3>Messages</h3>
+        <div id="messages"></div>
+        <button onclick="clearMessages()">Clear Messages</button>
+    </div>
+
+    <script>
+        let socket = null;
+        let isConnected = false;
+
+        function updateStatus(message, connected) {
+            const status = document.getElementById('status');
+            status.textContent = message;
+            status.className = `status ${connected ? 'connected' : 'disconnected'}`;
+            isConnected = connected;
+        }
+
+        function addMessage(message, type = 'info') {
+            const messages = document.getElementById('messages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'message';
+            messageDiv.textContent = `[${new Date().toISOString()}] ${type.toUpperCase()}: ${JSON.stringify(message, null, 2)}`;
+            messages.appendChild(messageDiv);
+            messages.scrollTop = messages.scrollHeight;
+        }
+
+        function connect() {
+            if (isConnected) {
+                addMessage('Already connected', 'warning');
+                return;
+            }
+
+            const serverUrl = document.getElementById('serverUrl').value;
+            const botId = document.getElementById('botId').value;
+            const sinceDate = document.getElementById('sinceDate').value;
+
+            if (!serverUrl || !botId) {
+                addMessage('Please provide server URL and bot ID', 'error');
+                return;
+            }
+
+            socket = io(serverUrl);
+
+            socket.on('connect', () => {
+                updateStatus('Connected', true);
+                addMessage('Connected to server', 'success');
+
+                // Register with the bot
+                const registrationData = {
+                    botId: botId,
+                    sinceDate: sinceDate ? new Date(sinceDate).toISOString() : undefined
+                };
+
+                socket.emit('register', registrationData);
+                addMessage('Sent registration:', registrationData, 'info');
+            });
+
+            socket.on('disconnect', () => {
+                updateStatus('Disconnected', false);
+                addMessage('Disconnected from server', 'warning');
+            });
+
+            socket.on('registered', (data) => {
+                addMessage('Registration confirmed:', data, 'success');
+            });
+
+            socket.on('webhook_data', (data) => {
+                addMessage('Webhook data received:', data, 'webhook');
+            });
+
+            socket.on('pending_data', (data) => {
+                addMessage('Pending data received:', data, 'pending');
+            });
+
+            socket.on('pong', () => {
+                addMessage('Pong received', 'ping');
+            });
+
+            socket.on('error', (data) => {
+                addMessage('Error:', data, 'error');
+            });
+
+            // Send ping every 30 seconds
+            setInterval(() => {
+                if (isConnected) {
+                    socket.emit('ping');
+                }
+            }, 30000);
+        }
+
+        function disconnect() {
+            if (socket) {
+                socket.disconnect();
+                socket = null;
+            }
+        }
+
+        function clearMessages() {
+            document.getElementById('messages').innerHTML = '';
+        }
+
+        async function getStats() {
+            try {
+                const serverUrl = document.getElementById('serverUrl').value;
+                const response = await fetch(`${serverUrl}/stats/total`);
+                const stats = await response.json();
+                addMessage('Total Stats:', stats, 'stats');
+            } catch (error) {
+                addMessage('Error getting stats:', error, 'error');
+            }
+        }
+
+        async function getBotStats() {
+            try {
+                const serverUrl = document.getElementById('serverUrl').value;
+                const response = await fetch(`${serverUrl}/stats/bots`);
+                const stats = await response.json();
+                addMessage('Bot Stats:', stats, 'stats');
+            } catch (error) {
+                addMessage('Error getting bot stats:', error, 'error');
+            }
+        }
+
+        // Auto-connect on page load if URL parameters are provided
+        window.onload = () => {
+            const urlParams = new URLSearchParams(window.location.search);
+            const serverUrl = urlParams.get('server');
+            const botId = urlParams.get('bot');
+            
+            if (serverUrl) {
+                document.getElementById('serverUrl').value = serverUrl;
+            }
+            if (botId) {
+                document.getElementById('botId').value = botId;
+            }
+        };
+    </script>
+</body>
+</html>
