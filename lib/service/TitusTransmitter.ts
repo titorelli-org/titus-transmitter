@@ -103,7 +103,9 @@ export class TitusTransmitter {
 
         this.io.to(`/updates/${botId}`).emit("update", update);
 
-        // await this.updateRepository.insert(update);
+        await this.updateRepository.insert(update);
+
+        return true;
       },
     );
   }
