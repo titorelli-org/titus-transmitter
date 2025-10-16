@@ -1,4 +1,5 @@
 import type { Logger } from "pino";
+import type { HookStateRepository } from "../repositories/HookStateRepository";
 
 export type WebhookInfo = {
   url: string;
@@ -8,6 +9,7 @@ export type WebhookInfo = {
   last_error_message: string;
   max_connections: number;
   allowed_updates: string[];
+  ip_address: string;
 };
 
 export type SetWebhookBody = {
@@ -16,11 +18,77 @@ export type SetWebhookBody = {
   description: string;
 };
 
+export type GetWebhookInfoResponse = {
+  ok: boolean;
+  result: Omit<WebhookInfo, "allowed_updates">;
+};
+
 export class Telegram {
-  constructor(
-    private readonly baseUrl = "https://api.telegram.org",
-    private readonly logger: Logger,
-  ) {}
+  private readonly baseUrl: string;
+  private readonly hookStateRepository: HookStateRepository;
+  private readonly logger: Logger;
+
+  constructor({
+    baseUrl = "https://api.telegram.org",
+    hookStateRepository,
+    logger,
+  }: {
+    baseUrl?: string;
+    hookStateRepository: HookStateRepository;
+    logger: Logger;
+  }) {
+    this.baseUrl = baseUrl;
+    this.hookStateRepository = hookStateRepository;
+    this.logger = logger;
+  }
+
+  public async ensureWebhook(
+    botId: string,
+    botToken: string,
+    {
+      url,
+      allowedUpdates,
+      secretToken,
+    }: { url: string; allowedUpdates: string[]; secretToken: string },
+  ) {
+    const webhookInfoResponse = await this.getWebhookInfo(botToken);
+
+    if (!webhookInfoResponse?.ok) {
+      await this.hookStateRepository.setWebhookFailed(botId);
+      return null;
+    }
+
+    const { result: webhookInfo } = webhookInfoResponse;
+
+    if (webhookInfo.url === url) {
+      return null;
+    }
+
+    // Update hook state with CAS logic built-in
+    const updateResult = await this.hookStateRepository.update({
+      botId,
+      webhookUrl: url,
+      secretToken,
+    });
+
+    if (!updateResult.success) {
+      this.logger.warn({ botId }, 'Version mismatch, skipping webhook update');
+      return null;
+    }
+
+    const setWebhookResult = await this.setWebhook(botToken, {
+      url,
+      allowedUpdates,
+      secretToken,
+    });
+
+    if (!setWebhookResult?.ok) {
+      await this.hookStateRepository.setWebhookFailed(botId);
+      return setWebhookResult;
+    }
+
+    return setWebhookResult;
+  }
 
   public async setWebhook(
     botToken: string,
@@ -28,11 +96,7 @@ export class Telegram {
       url,
       allowedUpdates,
       secretToken,
-    }: {
-      url: string;
-      allowedUpdates?: string[];
-      secretToken?: string;
-    },
+    }: { url: string; allowedUpdates?: string[]; secretToken?: string },
   ): Promise<SetWebhookBody | null> {
     try {
       const resp = await fetch(`${this.baseUrl}/bot${botToken}/setWebhook`, {
@@ -55,16 +119,18 @@ export class Telegram {
     }
   }
 
-  public async getWebhookInfo(botToken: string) {
-    const resp = await fetch(`${this.baseUrl}/bot${botToken}/getWebhookInfo`);
+  public async getWebhookInfo(
+    botToken: string,
+  ): Promise<GetWebhookInfoResponse | null> {
+    try {
+      const resp = await fetch(`${this.baseUrl}/bot${botToken}/getWebhookInfo`);
 
-    return {
-      status: resp.status,
-      webhookInfo:
-        resp.status === 200
-          ? ((await resp.json()) as Awaited<WebhookInfo>)
-          : null,
-    };
+      return resp.json();
+    } catch (error) {
+      this.logger.error(error);
+
+      return null;
+    }
   }
 
   public async deleteWebhook(

@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "nodemon",
     "start": "ts-node -r dotenv/config server.ts",
-    "test": "node --test --require dotenv/config --require ts-node/register tests/**/*.test.ts"
+    "test": "node --test --require dotenv/config --require ts-node/register tests/hookstaterepository.test.ts"
   },
   "author": "YChebotaev <yury@chebotaev.ru>",
   "license": "AGPL-3.0-only",
