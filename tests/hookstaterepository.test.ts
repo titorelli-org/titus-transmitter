@@ -524,4 +524,220 @@ describe("HookStateRepository", () => {
       assert.strictEqual(result.version, 6, "Version should be 6 (1 create + 5 operations)");
     });
   });
+
+  describe("timing-based methods", () => {
+    it("should update with timing when webhook changed", async () => {
+      const botId = "test-bot-1";
+      const webhookUrl = "https://example.com/webhook";
+      const secretToken = "secret123";
+      const apiCallAt = new Date();
+      const apiRespAt = new Date(apiCallAt.getTime() + 100);
+
+      // Create initial state
+      await repository.create({ botId, webhookUrl, secretToken });
+
+      // Update with timing
+      const result = await repository.updateWithTiming(
+        botId,
+        "https://example.com/new-webhook",
+        "new-secret",
+        apiCallAt,
+        apiRespAt,
+        true // webhook changed
+      );
+
+      assert.strictEqual(result.success, true, "Update should succeed");
+      assert.strictEqual(result.conflict, undefined, "No conflict expected");
+
+      // Verify the document was updated
+      const hookState = await collection.findOne({ botId });
+      assert.ok(hookState, "Hook state should exist");
+      assert.strictEqual(hookState.webhookUrl, "https://example.com/new-webhook");
+      assert.strictEqual(hookState.secretToken, "new-secret");
+      assert.strictEqual(hookState.apiCallAt?.getTime(), apiCallAt.getTime());
+      assert.strictEqual(hookState.apiRespAt?.getTime(), apiRespAt.getTime());
+      assert.ok(hookState.dbUpdateAt, "Database update timestamp should be set");
+      assert.strictEqual(hookState.lastWebhookUrl, "https://example.com/new-webhook");
+    });
+
+    it("should not update database when webhook didn't change", async () => {
+      const botId = "test-bot-1";
+      const webhookUrl = "https://example.com/webhook";
+      const secretToken = "secret123";
+
+      // Create initial state
+      await repository.create({ botId, webhookUrl, secretToken });
+
+      const originalState = await collection.findOne({ botId });
+      const originalVersion = originalState?.version;
+
+      // Update with timing but webhook didn't change
+      const result = await repository.updateWithTiming(
+        botId,
+        webhookUrl,
+        secretToken,
+        new Date(),
+        new Date(),
+        false // webhook didn't change
+      );
+
+      assert.strictEqual(result.success, true, "Should succeed but not update");
+
+      // Verify the document wasn't updated
+      const hookState = await collection.findOne({ botId });
+      assert.strictEqual(hookState?.version, originalVersion, "Version should not change");
+      assert.strictEqual(hookState?.webhookUrl, webhookUrl, "Webhook URL should not change");
+    });
+
+    it("should handle timing-based conflicts", async () => {
+      const botId = "test-bot-1";
+      const webhookUrl = "https://example.com/webhook";
+      const secretToken = "secret123";
+
+      // Create initial state with newer API call
+      const newerApiCallAt = new Date();
+      const newerApiRespAt = new Date(newerApiCallAt.getTime() + 100);
+      
+      await repository.createWithTiming(botId, webhookUrl, secretToken, newerApiCallAt, newerApiRespAt);
+
+      // Try to update with older API call
+      const olderApiCallAt = new Date(newerApiCallAt.getTime() - 1000);
+      const olderApiRespAt = new Date(olderApiCallAt.getTime() + 100);
+
+      const result = await repository.updateWithTiming(
+        botId,
+        "https://example.com/older-webhook",
+        "older-secret",
+        olderApiCallAt,
+        olderApiRespAt,
+        true
+      );
+
+      assert.strictEqual(result.success, false, "Update should fail");
+      assert.strictEqual(result.conflict, true, "Should detect conflict");
+      assert.strictEqual(result.reason, "newer_api_call_exists", "Should indicate newer API call exists");
+
+      // Verify the document wasn't updated
+      const hookState = await collection.findOne({ botId });
+      assert.strictEqual(hookState?.webhookUrl, webhookUrl, "Webhook URL should not change");
+      assert.strictEqual(hookState?.apiCallAt?.getTime(), newerApiCallAt.getTime(), "Should keep newer API call timestamp");
+    });
+
+    it("should create with timing successfully", async () => {
+      const botId = "test-bot-1";
+      const webhookUrl = "https://example.com/webhook";
+      const secretToken = "secret123";
+      const apiCallAt = new Date();
+      const apiRespAt = new Date(apiCallAt.getTime() + 100);
+
+      const result = await repository.createWithTiming(botId, webhookUrl, secretToken, apiCallAt, apiRespAt);
+
+      assert.strictEqual(result.success, true, "Create should succeed");
+
+      // Verify the document was created
+      const hookState = await collection.findOne({ botId });
+      assert.ok(hookState, "Hook state should exist");
+      assert.strictEqual(hookState.botId, botId);
+      assert.strictEqual(hookState.webhookUrl, webhookUrl);
+      assert.strictEqual(hookState.secretToken, secretToken);
+      assert.strictEqual(hookState.version, 1);
+      assert.strictEqual(hookState.apiCallAt?.getTime(), apiCallAt.getTime());
+      assert.strictEqual(hookState.apiRespAt?.getTime(), apiRespAt.getTime());
+      assert.ok(hookState.dbUpdateAt, "Database update timestamp should be set");
+      assert.strictEqual(hookState.lastWebhookUrl, webhookUrl);
+    });
+
+    it("should handle fresh connection (no existing record) in updateWithTiming", async () => {
+      const botId = "fresh-bot-1";
+      const webhookUrl = "https://example.com/fresh-webhook";
+      const secretToken = "fresh-secret";
+      const apiCallAt = new Date();
+      const apiRespAt = new Date(apiCallAt.getTime() + 100);
+
+      // No existing record - this simulates a fresh connection
+      // Call updateWithTiming directly without creating a record first
+      const result = await repository.updateWithTiming(
+        botId,
+        webhookUrl,
+        secretToken,
+        apiCallAt,
+        apiRespAt,
+        true // webhook changed
+      );
+
+      assert.strictEqual(result.success, true, "Update should succeed for fresh connection");
+      assert.strictEqual(result.conflict, undefined, "No conflict expected");
+
+      // Verify the document was created
+      const hookState = await collection.findOne({ botId });
+      assert.ok(hookState, "Hook state should be created for fresh connection");
+      assert.strictEqual(hookState.botId, botId);
+      assert.strictEqual(hookState.webhookUrl, webhookUrl);
+      assert.strictEqual(hookState.secretToken, secretToken);
+      assert.strictEqual(hookState.version, 1, "Version should be 1 for new record");
+      assert.strictEqual(hookState.apiCallAt?.getTime(), apiCallAt.getTime());
+      assert.strictEqual(hookState.apiRespAt?.getTime(), apiRespAt.getTime());
+      assert.ok(hookState.dbUpdateAt, "Database update timestamp should be set");
+      assert.strictEqual(hookState.lastWebhookUrl, webhookUrl);
+      assert.strictEqual(hookState.failed, false, "Should not be marked as failed");
+    });
+
+    it("should handle race condition in createWithTiming", async () => {
+      const botId = "test-bot-1";
+      const webhookUrl = "https://example.com/webhook";
+      const secretToken = "secret123";
+      const apiCallAt = new Date();
+      const apiRespAt = new Date(apiCallAt.getTime() + 100);
+
+      // Create first document
+      await repository.createWithTiming(botId, webhookUrl, secretToken, apiCallAt, apiRespAt);
+
+      // Try to create again (should fail due to duplicate key)
+      const result = await repository.createWithTiming(
+        botId,
+        "https://example.com/duplicate-webhook",
+        "duplicate-secret",
+        new Date(),
+        new Date()
+      );
+
+      assert.strictEqual(result.success, false, "Second create should fail");
+
+      // Verify the original document is unchanged
+      const hookState = await collection.findOne({ botId });
+      assert.strictEqual(hookState?.webhookUrl, webhookUrl, "Original webhook URL should be preserved");
+    });
+
+    it("should force update with timing", async () => {
+      const botId = "test-bot-1";
+      const webhookUrl = "https://example.com/webhook";
+      const secretToken = "secret123";
+
+      // Create initial state
+      await repository.create({ botId, webhookUrl, secretToken });
+
+      const apiCallAt = new Date();
+      const apiRespAt = new Date(apiCallAt.getTime() + 100);
+
+      const result = await repository.forceUpdateWithTiming(
+        botId,
+        "https://example.com/forced-webhook",
+        "forced-secret",
+        apiCallAt,
+        apiRespAt
+      );
+
+      assert.strictEqual(result.success, true, "Force update should succeed");
+
+      // Verify the document was updated
+      const hookState = await collection.findOne({ botId });
+      assert.ok(hookState, "Hook state should exist");
+      assert.strictEqual(hookState.webhookUrl, "https://example.com/forced-webhook");
+      assert.strictEqual(hookState.secretToken, "forced-secret");
+      assert.strictEqual(hookState.apiCallAt?.getTime(), apiCallAt.getTime());
+      assert.strictEqual(hookState.apiRespAt?.getTime(), apiRespAt.getTime());
+      assert.ok(hookState.dbUpdateAt, "Database update timestamp should be set");
+      assert.strictEqual(hookState.lastWebhookUrl, "https://example.com/forced-webhook");
+    });
+  });
 });

@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "nodemon",
     "start": "ts-node -r dotenv/config server.ts",
-    "test": "node --test --require dotenv/config --require ts-node/register tests/hookstaterepository.test.ts"
+    "test": "node --test --require dotenv/config --require ts-node/register tests/**/*.test.ts",
+    "test:start": "ts-node -r dotenv/config tests/start.ts"
   },
   "author": "YChebotaev <yury@chebotaev.ru>",
   "license": "AGPL-3.0-only",
@@ -31,6 +32,8 @@
   },
   "devDependencies": {
     "npm-check-updates": "^19.0.0",
-    "socket.io-client": "^4.8.1"
+    "socket.io-client": "^4.8.1",
+    "why-is-node-running": "^3.2.2",
+    "zx": "^8.8.4"
   }
 }

@@ -1,6 +1,8 @@
 import fastify, { type FastifyInstance } from "fastify";
 
-export const createDummyTelegramApiServer = () => {
+export type DummyTelegramApiServer = FastifyInstance;
+
+export const createDummyTelegramApiServer = (): DummyTelegramApiServer => {
   const apiServer = fastify();
   const webhookInfoMap = new Map<string, any>();
 
@@ -29,7 +31,11 @@ export const createDummyTelegramApiServer = () => {
         secret_token,
       });
 
-      return true;
+      return {
+        ok: true,
+        result: true,
+        description: "Webhook was set",
+      };
     },
   );
 

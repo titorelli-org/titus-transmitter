@@ -16,6 +16,7 @@ export const main = async ({
   telegramBaseUrl?: string;
 } = {}) => {
   const mongoClient = await MongoClient.connect(mongoUrl, {
+    directConnection: true,
     auth: {
       username: env.MONGO_USER,
       password: env.MONGO_PASSWORD,
@@ -40,6 +41,9 @@ export const main = async ({
       collection: mongoClient.db("transmitter").collection("updates"),
       logger: logger,
     }),
+    onClose: async () => {
+      await mongoClient.close();
+    },
     logger: logger,
   });
 };

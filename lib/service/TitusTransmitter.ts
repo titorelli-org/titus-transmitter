@@ -19,6 +19,7 @@ export type TitusTransmitterConfig = {
   telegram?: {
     baseUrl?: string;
   };
+  onClose?: () => void;
   logger: Logger;
 };
 
@@ -32,6 +33,7 @@ export class TitusTransmitter {
   private readonly hookStateRepository: HookStateRepository;
   private readonly updateRepository: UpdateRepository;
   private readonly transmitterOrigin = env.TRANSMITTER_ORIGIN;
+  private readonly onClose?: () => void;
   private readonly logger: Logger;
 
   constructor({
@@ -41,6 +43,7 @@ export class TitusTransmitter {
     hookStateRepository,
     updateRepository,
     telegram: telegramConfig,
+    onClose,
     logger,
   }: TitusTransmitterConfig) {
     this.port = port;
@@ -54,6 +57,7 @@ export class TitusTransmitter {
       logger,
     });
     this.logger = logger;
+    this.onClose = onClose;
     // @ts-expect-error 2322
     this.fastify = fastify({
       loggerInstance: this.logger,
@@ -84,8 +88,9 @@ export class TitusTransmitter {
   }
 
   async stop() {
-    await this.fastify.close();
     await this.io.close();
+    await this.fastify.close();
+    await this.onClose?.();
   }
 
   private installUpdatesHandlers() {
@@ -159,13 +164,9 @@ export class TitusTransmitter {
   }
 
   private async ensureWebhook(botId: string, botToken: string) {
-    await this.createWebhook(botId, botToken);
-  }
-
-  private async createWebhook(botId: string, botToken: string) {
     const url = `${this.transmitterOrigin}/updates/${botId}`;
 
-    const result = await this.telegram.setWebhook(botToken, {
+    await this.telegram.ensureWebhook(botId, botToken, {
       url,
       secretToken: await this.getSecretTokenForBot(botId),
       allowedUpdates: [
@@ -189,12 +190,6 @@ export class TitusTransmitter {
         "removed_chat_boost",
       ],
     });
-
-    if (!result) {
-      this.logger.warn({ botId, botToken, url }, "Failed to create webhook");
-    }
-
-    return result;
   }
 
   private async getSecretTokenForBot(botId: string) {
@@ -206,6 +201,6 @@ export class TitusTransmitter {
   private async decryptBotToken(botTokenEncrypted: string) {
     // TODO: return as is for now
 
-    return botTokenEncrypted.replace("-encrypted-", "-");
+    return botTokenEncrypted;
   }
 }
