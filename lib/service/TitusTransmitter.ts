@@ -1,7 +1,9 @@
+import crypto from "node:crypto";
 import fastify, { type FastifyInstance } from "fastify";
 import type { Logger } from "pino";
 import { Socket, Server as SocketIOServer } from "socket.io";
 import type { Update } from "@grammyjs/types";
+import { BotTokenDecryptor } from "./BotTokenDecryptor";
 import type {
   BotStateRepository,
   HookStateRepository,
@@ -33,6 +35,7 @@ export class TitusTransmitter {
   private readonly hookStateRepository: HookStateRepository;
   private readonly updateRepository: UpdateRepository;
   private readonly transmitterOrigin = env.TRANSMITTER_ORIGIN;
+  private readonly botTokenDecryptor: BotTokenDecryptor;
   private readonly onClose?: () => void;
   private readonly logger: Logger;
 
@@ -58,6 +61,10 @@ export class TitusTransmitter {
     });
     this.logger = logger;
     this.onClose = onClose;
+    this.botTokenDecryptor = new BotTokenDecryptor(
+      env.TOKEN_ENCRYPTION_SECRET,
+      this.logger,
+    );
     // @ts-expect-error 2322
     this.fastify = fastify({
       loggerInstance: this.logger,
@@ -148,7 +155,12 @@ export class TitusTransmitter {
 
     socket.join(`/updates/${botId}`);
 
-    const botToken = await this.decryptBotToken(botTokenEncrypted);
+    const botToken = await this.decryptBotToken(botId, botTokenEncrypted);
+
+    if (!botToken) {
+      socket.disconnect(true);
+      return;
+    }
 
     await this.ensureWebhook(botId, botToken);
   };
@@ -198,9 +210,9 @@ export class TitusTransmitter {
     return `--bot-secret-token-${botId}--`;
   }
 
-  private async decryptBotToken(botTokenEncrypted: string) {
-    // TODO: return as is for now
-
+  private async decryptBotToken(botId: string, botTokenEncrypted: string) {
     return botTokenEncrypted;
+
+    // return this.botTokenDecryptor.decryptBotToken(botId, botTokenEncrypted);
   }
 }

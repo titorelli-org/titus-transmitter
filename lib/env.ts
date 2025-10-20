@@ -7,4 +7,5 @@ export const env = cleanEnv(process.env, {
   MONGO_URL: url({ default: "mongodb://localhost:27017/" }),
   MONGO_USER: str({ default: "admin" }),
   MONGO_PASSWORD: str({ default: "admin" }),
+  TOKEN_ENCRYPTION_SECRET: str({ default: "--not-really-a-secret--" }),
 });
