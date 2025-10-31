@@ -1,6 +1,6 @@
 import { makePoller, type Poller, type Unsubscribe } from "reactive-poller";
 import { type Logger } from "pino";
-import type { Telegram, WebhookInfo } from "./Telegram";
+import type { Telegram, WebhookInfo } from "../telegram";
 import { HookState, type HookStateRepository } from "../repositories";
 import { SWRCache } from "../cache";
 
