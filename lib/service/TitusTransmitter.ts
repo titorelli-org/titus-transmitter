@@ -1,4 +1,3 @@
-import crypto from "node:crypto";
 import fastify, { type FastifyInstance } from "fastify";
 import type { Logger } from "pino";
 import { Socket, Server as SocketIOServer } from "socket.io";
@@ -11,6 +10,7 @@ import type {
 } from "../repositories";
 import { Telegram } from "../telegram";
 import { env } from "../env";
+import { HookStatePoller } from "./HookStatePoller";
 
 export type TitusTransmitterConfig = {
   port: number;
@@ -36,6 +36,7 @@ export class TitusTransmitter {
   private readonly updateRepository: UpdateRepository;
   private readonly transmitterOrigin = env.TRANSMITTER_ORIGIN;
   private readonly botTokenDecryptor: BotTokenDecryptor;
+  private readonly hookStatePoller: HookStatePoller;
   private readonly onClose?: () => void;
   private readonly logger: Logger;
 
@@ -61,6 +62,11 @@ export class TitusTransmitter {
     });
     this.logger = logger;
     this.onClose = onClose;
+    this.hookStatePoller = new HookStatePoller({
+      hookStateRepository: this.hookStateRepository,
+      telegram: this.telegram,
+      logger: this.logger,
+    });
     this.botTokenDecryptor = new BotTokenDecryptor(
       env.TOKEN_ENCRYPTION_SECRET,
       this.logger,
@@ -90,6 +96,8 @@ export class TitusTransmitter {
       },
     );
 
+    await this.hookStatePoller.start();
+
     this.installUpdatesHandlers();
     this.installSocketHandlers();
   }
@@ -97,6 +105,7 @@ export class TitusTransmitter {
   async stop() {
     await this.io.close();
     await this.fastify.close();
+    await this.hookStatePoller.stop();
     await this.onClose?.();
   }
 
@@ -178,7 +187,9 @@ export class TitusTransmitter {
   private async ensureWebhook(botId: string, botToken: string) {
     const url = `${this.transmitterOrigin}/updates/${botId}`;
 
-    await this.telegram.ensureWebhook(botId, botToken, {
+    await this.telegram.setWebhook({
+      botId,
+      botToken,
       url,
       secretToken: await this.getSecretTokenForBot(botId),
       allowedUpdates: [
