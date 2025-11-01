@@ -32,7 +32,6 @@ export class BotStateRepository extends BaseRepository {
           updatedAt: now,
         },
         $setOnInsert: {
-          receivedUpdatesCount: 0,
           processedUpdatesCount: 0,
           lastProcessedUpdateAt: null,
           lastProcessedUpdateId: null,
