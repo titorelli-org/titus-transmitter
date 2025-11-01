@@ -22,14 +22,17 @@ export class BotStateRepository extends BaseRepository {
     await this.collection.updateOne(
       { botId },
       {
+        $inc: {
+          receivedUpdatesCount: 1,
+        },
         $set: {
           botId,
           lastReceivedUpdateAt: now,
           lastReceivedUpdateId: update.update_id,
-          receivedUpdatesCount: { $inc: 1 },
           updatedAt: now,
         },
         $setOnInsert: {
+          receivedUpdatesCount: 0,
           processedUpdatesCount: 0,
           lastProcessedUpdateAt: null,
           lastProcessedUpdateId: null,
