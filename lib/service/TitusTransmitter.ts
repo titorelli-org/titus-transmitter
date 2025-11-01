@@ -129,6 +129,7 @@ export class TitusTransmitter {
         this.io.to(`/updates/${botId}`).emit("update", update);
 
         await this.updateRepository.insert(update);
+        await this.botStateRepository.updateReceived(botId, update);
 
         return true;
       },
@@ -136,7 +137,7 @@ export class TitusTransmitter {
   }
 
   private installSocketHandlers() {
-    this.io.on("connection", this.onSocketConnection);
+    this.io.on("connection", this.socketConnectionListener);
 
     this.io.on("disconnect", (socket) => {
       console.log("[Server] Socket disconnected");
@@ -151,7 +152,7 @@ export class TitusTransmitter {
     });
   }
 
-  private onSocketConnection = async (socket: Socket) => {
+  private socketConnectionListener = async (socket: Socket) => {
     const { botId, accessToken, botTokenEncrypted } = socket.handshake.auth;
 
     const tokenValid = await this.validateAccessToken(botId, accessToken);
@@ -171,7 +172,16 @@ export class TitusTransmitter {
       return;
     }
 
+    socket.on(
+      "update-processed",
+      this.socketUpdateProcessedListener.bind(this, botId),
+    );
+
     await this.ensureWebhook(botId, botToken);
+  };
+
+  private socketUpdateProcessedListener = (botId: string, updateId: number) => {
+    void this.botStateRepository.updateProcessed(botId, updateId);
   };
 
   private async validateAccessToken(botId: string, accessToken: string) {
