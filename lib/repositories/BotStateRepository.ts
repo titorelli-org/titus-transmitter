@@ -48,10 +48,12 @@ export class BotStateRepository extends BaseRepository {
     await this.collection.updateOne(
       { botId },
       {
+        $inc: {
+          processedUpdatesCount: 1,
+        },
         $set: {
           lastProcessedUpdateAt: now,
           lastProcessedUpdateId: updateId,
-          processedUpdatesCount: { $inc: 1 },
           updatedAt: now,
         },
       },
